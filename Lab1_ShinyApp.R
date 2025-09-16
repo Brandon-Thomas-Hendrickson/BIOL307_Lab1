@@ -1,7 +1,4 @@
-# Lab 1 - R Shiny Ecological Data Analysis Application
-# University of Louisiana at Lafayette - BIOL 307
 
-# Load required libraries
 library(shiny)
 library(ggplot2)
 library(dplyr)
@@ -16,21 +13,20 @@ library(car)
 library(vegan)
 library(tidyr)
 
-# Define UI
+
 ui <- fluidPage(
   titlePanel("Lab 1 - Ecological Data Analysis"),
   
   tabsetPanel(
     id = "main_tabs",
     
-    # Quadrat Sampling Tab
     tabPanel("Quadrat Sampling",
       sidebarLayout(
         sidebarPanel(
           h3("Quadrat Data Upload"),
           fileInput("quadrat_file", "Choose CSV File for Quadrat Data",
                     accept = c(".csv")),
-          p("Required columns: transect, quadrat, percent_cover, richness"),
+          p("Required columns: habitat, transect, quadrat, percent_cover, richness"),
           verbatimTextOutput("quadrat_upload_status"),
           
           hr(),
@@ -49,6 +45,7 @@ ui <- fluidPage(
                      h3("Quadrat Data Upload Instructions"),
                      p("Please upload a CSV file with the following required columns:"),
                      tags$ul(
+                       tags$li("habitat: Factor identifying the habitat type (e.g., grassland, forest, wetland)"),
                        tags$li("transect: Factor identifying the transect (e.g., A, B, C)"),
                        tags$li("quadrat: Factor identifying the quadrat within transect"),
                        tags$li("percent_cover: Numeric value for percent cover (0-100)"),
@@ -78,13 +75,24 @@ ui <- fluidPage(
                      plotOutput("quadrat_model_plot", height = "500px"),
                      br(),
                      h4("R Code Used:"),
-                     verbatimTextOutput("quadrat_model_code"))
+                     verbatimTextOutput("quadrat_model_code")),
+            
+            tabPanel("Habitat Analysis",
+                     h3("Habitat Effects on Percent Cover"),
+                     h4("ANOVA: percent_cover ~ habitat"),
+                     actionButton("quadrat_habitat", "Run Habitat Analysis", class = "btn-success"),
+                     br(), br(),
+                     verbatimTextOutput("quadrat_habitat_output"),
+                     br(),
+                     plotOutput("quadrat_habitat_plot", height = "500px"),
+                     br(),
+                     h4("R Code Used:"),
+                     verbatimTextOutput("quadrat_habitat_code"))
           )
         )
       )
     ),
     
-    # Point-Intercept Sampling Tab
     tabPanel("Point-Intercept Sampling",
       sidebarLayout(
         sidebarPanel(
@@ -162,7 +170,6 @@ ui <- fluidPage(
       )
     ),
     
-    # Combined Report Generation Tab
     tabPanel("Combined Report",
       fluidRow(
         column(12,
@@ -208,7 +215,6 @@ ui <- fluidPage(
   )
 )
 
-# REPORT CONTENTS
 create_enhanced_report_content <- function(data_df, summary_df, model_obj, include_code = TRUE) {
   content <- c(
     "---",
@@ -437,14 +443,13 @@ create_enhanced_report_content <- function(data_df, summary_df, model_obj, inclu
   return(content)
 }
 
-# COMBINED REPORT CONTENTS
 create_combined_report_content <- function(quadrat_data_df = NULL, quadrat_summary_df = NULL, quadrat_model_obj = NULL, 
                                          processed_point_data = NULL, alpha_div = NULL, gamma_div = NULL, anova_obj = NULL, 
                                          include_code = TRUE) {
   content <- c(
     "---",
-    "title: 'Lab 1 - Comprehensive Ecological Data Analysis Report'",
-    "author: 'BIOL 307 - Ecology Laboratory'",
+    "title: 'Lab 1 - Vegetation Survey Report'",
+    "author: 'BIOL 307 - Field Techniques'",
     "date: '`r Sys.Date()`'",
     "output:",
     "  html_document:",
@@ -467,42 +472,21 @@ create_combined_report_content <- function(quadrat_data_df = NULL, quadrat_summa
     "library(tidyr)",
     "```",
     "",
-    "# Abstract",
+    "# Question(s)",
     "",
-    "This comprehensive study examined plant community patterns using two complementary ecological sampling methods: quadrat sampling and point-intercept sampling. The quadrat analysis focused on species richness-percent cover relationships using linear mixed effects modeling, while the point-intercept analysis examined diversity patterns across different habitat types. Together, these analyses provide a multifaceted view of plant community structure and ecological processes.",
+    "How does plant species richness influence percent cover in prairie quadrats across multiple transects? How do different habitat types compare in their percent cover? Additionally, how do habitats differ in species diversity based on point-intercept sampling data?",
     ""
   )
   
-  # Add Quadrat Analysis Section if data is provided
   if (!is.null(quadrat_data_df) && !is.null(quadrat_model_obj)) {
     quadrat_section <- c(
       "# Part I: Quadrat Sampling Analysis",
       "",
-      "## Introduction - Quadrat Sampling",
-      "",
-      "Understanding the relationship between species diversity and vegetation abundance is fundamental to community ecology and ecosystem management. In grassland systems, the connection between species richness (the number of species present) and percent cover (the proportion of ground covered by vegetation) can reveal important patterns about community assembly, resource use efficiency, and ecosystem functioning.",
-      "",
-      "This analysis focuses on field data collected from prairie quadrats arranged across multiple transects, providing a hierarchical sampling design typical of ecological field studies. The nested structure of quadrats within transects requires specialized statistical approaches that account for both the fixed effects of interest and the random variation among sampling locations.",
-      "",
       "## Methods - Quadrat Sampling",
       "",
-      "Vegetation data were collected using a systematic sampling design with quadrats nested within transects across the study area. Each quadrat was surveyed for percent cover (estimated as the proportion of ground surface covered by living vegetation) and species richness (total count of plant species present).",
+      "On [Date] at [Time], we conducted vegetation surveys at [Place]. We established [number of transects per habitat] [length of transect] transects across each habitat (ie. [habitat 1, habitat 2]). Quadrats were placed ever [interval used] in a systematic design. Within each quadrat, we estimated percent cover of [species or species recorded]. We also recorded species richness as the total number of different plant species observed within each quadrat (this could have been done, or not done)",
       "",
-      "Statistical analysis employed linear mixed effects modeling to examine the relationship between species richness (fixed effect) and percent cover (response variable) while accounting for transect-level random effects.",
-      "",
-      paste0("```{r load_quadrat_data, echo=", ifelse(include_code, "TRUE", "FALSE"), "}"),
-      "# Load and prepare the quadrat data",
-      "quadrat_data <- data.frame(",
-      paste0("  transect = c(", paste(paste0("'", quadrat_data_df$transect, "'"), collapse = ", "), "),"),
-      paste0("  quadrat = c(", paste(quadrat_data_df$quadrat, collapse = ", "), "),"),
-      paste0("  percent_cover = c(", paste(quadrat_data_df$percent_cover, collapse = ", "), "),"),
-      paste0("  richness = c(", paste(quadrat_data_df$richness, collapse = ", "), ")"),
-      ")",
-      "",
-      "# Convert to factors",
-      "quadrat_data$transect <- as.factor(quadrat_data$transect)",
-      "quadrat_data$quadrat <- as.factor(quadrat_data$quadrat)",
-      "```",
+      "Statistical analysis employed two complementary approaches: (1) linear mixed effects modeling to examine species richness effects on percent cover while accounting for transect-level random effects, and (2) one-way ANOVA to compare habitat effects on percent cover, with transects nested within habitats.",
       "",
       "## Results - Quadrat Sampling",
       "",
@@ -513,11 +497,26 @@ create_combined_report_content <- function(quadrat_data_df = NULL, quadrat_summa
             round(nrow(quadrat_data_df) / length(unique(quadrat_data_df$transect)), 1), 
             "quadrats per transect. Overall mean percent cover was", 
             round(mean(quadrat_data_df$percent_cover), 2), "% (SD =", 
-            round(sd(quadrat_data_df$percent_cover), 2), "%), while mean species richness was", 
+            round(sd(quadrat_data_df$percent_cover), 2), "%). The dataset included", 
+            length(unique(quadrat_data_df$habitat)), "habitat types with mean species richness of", 
             round(mean(quadrat_data_df$richness), 2), "species per quadrat (SD =", 
             round(sd(quadrat_data_df$richness), 2), ")."),
       "",
       paste0("```{r quadrat_summary, echo=", ifelse(include_code, "TRUE", "FALSE"), "}"),
+      "# Load the quadrat data",
+      paste("quadrat_data <- data.frame("),
+      paste("habitat = c(", paste0("'", quadrat_data_df$habitat, "'", collapse = ", "), "),"),
+      paste("transect = c(", paste0("'", quadrat_data_df$transect, "'", collapse = ", "), "),"),
+      paste("quadrat = c(", paste0("'", quadrat_data_df$quadrat, "'", collapse = ", "), "),"),
+      paste("percent_cover = c(", paste(quadrat_data_df$percent_cover, collapse = ", "), "),"),
+      paste("richness = c(", paste(quadrat_data_df$richness, collapse = ", "), ")"),
+      ")",
+      "",
+      "# Convert to factors",
+      "quadrat_data$habitat <- as.factor(quadrat_data$habitat)",
+      "quadrat_data$transect <- as.factor(quadrat_data$transect)",
+      "quadrat_data$quadrat <- as.factor(quadrat_data$quadrat)",
+      "",
       "# Summary statistics by transect",
       "summary_by_transect <- quadrat_data %>%",
       "  group_by(transect) %>%",
@@ -535,10 +534,10 @@ create_combined_report_content <- function(quadrat_data_df = NULL, quadrat_summa
       "      col.names = c('Transect', 'N Quadrats', 'Mean Cover (%)', 'SD Cover', 'Mean Richness', 'SD Richness'))",
       "```",
       "",
-      "### Statistical Modeling",
+      "### Species Richness Analysis",
       "",
       paste0("```{r quadrat_model, echo=", ifelse(include_code, "TRUE", "FALSE"), "}"),
-      "# Fit linear mixed effects model",
+      "# Fit linear mixed effects model for richness effects",
       "model <- lmer(percent_cover ~ richness + (1|transect), data = quadrat_data)",
       "",
       "# Display model results",
@@ -555,8 +554,10 @@ create_combined_report_content <- function(quadrat_data_df = NULL, quadrat_summa
       "print(anova_result)",
       "```",
       "",
+      "### Data Visualization",
+      "",
       paste0("```{r quadrat_plots, echo=", ifelse(include_code, "TRUE", "FALSE"), "}"),
-      "# Visualization",
+      "# Create visualizations for richness analysis",
       "p1 <- ggplot(quadrat_data, aes(x = transect, y = percent_cover)) +",
       "  geom_boxplot(fill = 'lightblue', alpha = 0.7) +",
       "  geom_point(position = position_jitter(width = 0.2), alpha = 0.5) +",
@@ -580,16 +581,47 @@ create_combined_report_content <- function(quadrat_data_df = NULL, quadrat_summa
     content <- c(content, quadrat_section)
   }
   
-  # Add Point-Intercept Analysis Section if data is provided
+  if (!is.null(quadrat_data_df)) {
+    habitat_section <- c(
+      "### Habitat Analysis",
+      "",
+      "In addition to examining richness-cover relationships, we analyzed habitat effects on percent cover using ANOVA. Since transects are nested within habitats, we used a simple one-way ANOVA rather than a mixed effects model.",
+      "",
+      paste0("```{r habitat_analysis, echo=", ifelse(include_code, "TRUE", "FALSE"), "}"),
+      "# Habitat effects ANOVA (transects nested within habitats)",
+      "habitat_model <- aov(percent_cover ~ habitat, data = quadrat_data)",
+      "",
+      "# Display ANOVA results",
+      "summary(habitat_model)",
+      "",
+      "# Post-hoc comparisons if significant",
+      "if(summary(habitat_model)[[1]]$'Pr(>F)'[1] < 0.05) {",
+      "  cat('\\nPost-hoc Tukey HSD test:\\n')",
+      "  print(TukeyHSD(habitat_model))",
+      "}",
+      "```",
+      "",
+      paste0("```{r habitat_plot, echo=", ifelse(include_code, "TRUE", "FALSE"), "}"),
+      "# Habitat comparison plot",
+      "habitat_plot <- ggplot(quadrat_data, aes(x = habitat, y = percent_cover, fill = habitat)) +",
+      "  geom_boxplot(alpha = 0.7, outlier.shape = 16, outlier.size = 2) +",
+      "  geom_jitter(width = 0.2, alpha = 0.5, size = 2) +",
+      "  labs(title = 'Habitat Effects on Percent Cover',",
+      "       x = 'Habitat Type', y = 'Percent Cover (%)', fill = 'Habitat') +",
+      "  theme_minimal() +",
+      "  scale_fill_viridis_d() +",
+      "  theme(axis.text.x = element_text(angle = 45, hjust = 1))",
+      "",
+      "print(habitat_plot)",
+      "```",
+      ""
+    )
+    content <- c(content, habitat_section)
+  }
+  
   if (!is.null(processed_point_data) && !is.null(anova_obj)) {
     point_section <- c(
       "# Part II: Point-Intercept Sampling Analysis",
-      "",
-      "## Introduction - Point-Intercept Sampling",
-      "",
-      "Point-intercept sampling is a widely used method in plant ecology for assessing species composition and diversity across different spatial scales. This technique allows researchers to quantify species presence/absence at specific points along transects, providing detailed information about community structure and spatial patterns of biodiversity.",
-      "",
-      "Understanding diversity patterns at multiple scales is crucial for ecological research and conservation planning. Alpha diversity (local species richness) provides information about community structure at the transect level, while gamma diversity (regional species richness) reflects the total species pool available within each habitat type.",
       "",
       "## Methods - Point-Intercept Sampling",
       "",
@@ -666,44 +698,24 @@ create_combined_report_content <- function(quadrat_data_df = NULL, quadrat_summa
     content <- c(content, point_section)
   }
   
-  # Add Discussion and Conclusions
   final_section <- c(
     "# Integrated Discussion",
     "",
-    "## Comparative Insights",
-    "",
     "The combination of quadrat sampling and point-intercept sampling methods provides complementary perspectives on plant community ecology. While quadrat sampling reveals relationships between diversity and vegetation coverage at fine spatial scales, point-intercept sampling captures broader patterns of species composition and habitat-level diversity.",
-    "",
-    "## Methodological Considerations",
     "",
     "Each sampling method has distinct advantages and limitations. Quadrat sampling provides detailed quantitative data on vegetation coverage and local species richness relationships, making it ideal for understanding resource-diversity dynamics. Point-intercept sampling efficiently captures species composition across larger spatial extents and multiple habitat types, making it valuable for landscape-level diversity assessments.",
     "",
-    "## Management Implications",
-    "",
     "The results from both analyses provide complementary information for ecosystem management and conservation planning. Understanding both local-scale diversity-function relationships and broader habitat-level diversity patterns is essential for developing effective conservation strategies that operate at multiple spatial scales.",
-    "",
-    "## Future Research",
     "",
     "Future studies could benefit from integrating these sampling approaches within the same study system to directly compare patterns and processes across spatial scales. Long-term monitoring using both methods would provide insights into temporal dynamics and stability of ecological patterns.",
     "",
-    "# Conclusions",
-    "",
-    "This comprehensive analysis demonstrates the value of using multiple sampling approaches to understand plant community ecology. The quadrat and point-intercept methods each contribute unique insights into diversity patterns, species-environment relationships, and community structure. Together, they provide a robust foundation for ecological understanding and evidence-based management decisions.",
-    "",
-    "Key findings include:",
-    "- Quantification of diversity-abundance relationships at the quadrat scale",
-    "- Assessment of habitat-level diversity patterns using point-intercept sampling", 
-    "- Statistical evaluation of community differences across spatial scales",
-    "- Demonstration of complementary insights from different sampling methodologies",
-    "",
-    "This integrated approach exemplifies best practices in ecological research and provides a template for comprehensive biodiversity assessments."
+    "This comprehensive analysis demonstrates the value of using multiple sampling approaches to understand plant community ecology. The quadrat and point-intercept methods each contribute unique insights into diversity patterns, species-environment relationships, and community structure. Together, they provide a robust foundation for ecological understanding and evidence-based management decisions."
   )
   
   content <- c(content, final_section)
   return(content)
 }
 
-# POINT-INTERCEPT REPORT CONTENTS (kept for backward compatibility)
 create_point_intercept_report_content <- function(processed_data, alpha_div, gamma_div, anova_obj, include_code = TRUE) {
   content <- c(
     "---",
@@ -726,16 +738,6 @@ create_point_intercept_report_content <- function(processed_data, alpha_div, gam
     "library(vegan)",
     "library(tidyr)",
     "```",
-    "",
-    "# Abstract",
-    "",
-    "This study analyzed plant community diversity patterns using point-intercept sampling across different habitat types. We examined alpha diversity (species richness per transect), gamma diversity (total species richness per habitat), and beta diversity (community dissimilarity) to understand biodiversity patterns and habitat differences. Our analysis included ANOVA testing to determine if habitats significantly differ in species richness.",
-    "",
-    "# Introduction",
-    "",
-    "Point-intercept sampling is a widely used method in plant ecology for assessing species composition and diversity across different spatial scales. This technique allows researchers to quantify species presence/absence at specific points along transects, providing detailed information about community structure and spatial patterns of biodiversity.",
-    "",
-    "Understanding diversity patterns at multiple scales is crucial for ecological research and conservation planning. Alpha diversity (local species richness) provides information about community structure at the transect level, while gamma diversity (regional species richness) reflects the total species pool available within each habitat type. Beta diversity measures the turnover or dissimilarity between communities, indicating how species composition changes across space.",
     "",
     "# Methods",
     "",
@@ -832,33 +834,17 @@ create_point_intercept_report_content <- function(processed_data, alpha_div, gam
     "",
     "# Discussion",
     "",
-    "## Ecological Interpretation",
-    "",
     "The point-intercept sampling analysis revealed important patterns in plant community diversity across different habitat types. The relationship between alpha and gamma diversity provides insights into how local and regional processes influence community assembly and species coexistence.",
     "",
     "Differences in alpha diversity between habitats may reflect varying environmental conditions, resource availability, or disturbance regimes. Habitats with consistently higher alpha diversity across transects suggest more favorable conditions for species coexistence or greater habitat heterogeneity at fine spatial scales.",
     "",
     "The magnitude of gamma diversity relative to alpha diversity indicates the degree of species turnover within habitats. High gamma diversity coupled with moderate alpha diversity suggests significant beta diversity, indicating that different transects within the same habitat type support distinct species assemblages.",
     "",
-    "## Management Implications",
-    "",
     "Understanding diversity patterns at multiple spatial scales has important implications for conservation and habitat management. Habitats with high gamma diversity represent important regional species pools that should be prioritized for conservation efforts. High beta diversity within habitats suggests that preserving multiple sites within each habitat type is necessary to maintain full species complements.",
-    "",
-    "## Study Limitations",
     "",
     "Several limitations should be considered when interpreting these results. The point-intercept method may underestimate rare species that occur at low densities. Temporal variation in species composition was not assessed, as sampling represents a single time point. Environmental variables that might explain diversity patterns were not measured but could provide additional insights into the mechanisms driving observed patterns.",
     "",
-    "# Conclusions",
-    "",
-    "This point-intercept sampling analysis successfully quantified plant community diversity patterns across multiple spatial scales. The results demonstrate the value of multi-scale diversity assessments for understanding community ecology and provide a foundation for evidence-based habitat management decisions.",
-    "",
-    "Key findings include:",
-    "- Quantification of alpha diversity patterns across transects and habitats",
-    "- Assessment of gamma diversity representing total habitat-level species pools", 
-    "- Statistical evaluation of habitat differences in species richness",
-    "- Documentation of beta diversity patterns indicating community turnover",
-    "",
-    "These results contribute to our understanding of plant community organization and provide practical information for conservation planning and habitat management in the study system."
+    "This point-intercept sampling analysis successfully quantified plant community diversity patterns across multiple spatial scales. The results demonstrate the value of multi-scale diversity assessments for understanding community ecology and provide a foundation for evidence-based habitat management decisions."
   )
   
   return(content)
@@ -866,7 +852,6 @@ create_point_intercept_report_content <- function(processed_data, alpha_div, gam
 
 server <- function(input, output, session) {
   
-  # ==== QUADRAT SAMPLING FUNCTIONALITY ====
   
   quadrat_data <- reactive({
     req(input$quadrat_file)
@@ -874,12 +859,13 @@ server <- function(input, output, session) {
     tryCatch({
       df <- read.csv(input$quadrat_file$datapath, stringsAsFactors = TRUE)
       
-      required_cols <- c("transect", "quadrat", "percent_cover", "richness")
+      required_cols <- c("habitat", "transect", "quadrat", "percent_cover", "richness")
       if (!all(required_cols %in% names(df))) {
         missing_cols <- setdiff(required_cols, names(df))
         stop(paste("Missing required columns:", paste(missing_cols, collapse = ", ")))
       }
       
+      df$habitat <- as.factor(df$habitat)
       df$transect <- as.factor(df$transect)
       df$quadrat <- as.factor(df$quadrat)
       
@@ -893,7 +879,7 @@ server <- function(input, output, session) {
     if (is.null(input$quadrat_file)) {
       "No file uploaded"
     } else if (is.null(quadrat_data())) {
-      "Error: Please check that your CSV has the required columns: transect, quadrat, percent_cover, richness"
+      "Error: Please check that your CSV has the required columns: habitat, transect, quadrat, percent_cover, richness"
     } else {
       paste("Success! Uploaded", nrow(quadrat_data()), "observations from", 
             length(unique(quadrat_data()$transect)), "transects")
@@ -1026,7 +1012,51 @@ Anova(model, type = 2)"
     updateTabsetPanel(session, "quadrat_tabs", selected = "Statistical Model")
   })
   
-  # ==== POINT-INTERCEPT SAMPLING FUNCTIONALITY ====
+  quadrat_habitat_result <- reactive({
+    req(quadrat_data())
+    tryCatch({
+      aov(percent_cover ~ habitat, data = quadrat_data())
+    }, error = function(e) {
+      return(NULL)
+    })
+  })
+  
+  observeEvent(input$quadrat_habitat, {
+    output$quadrat_habitat_output <- renderPrint({
+      req(quadrat_habitat_result())
+      
+      cat("Habitat Effects Analysis (ANOVA)\n")
+      cat("Model: percent_cover ~ habitat\n\n")
+      print(summary(quadrat_habitat_result()))
+      
+      cat("\n", rep("=", 50), "\n")
+      cat("ANOVA Table\n\n")
+      print(anova(quadrat_habitat_result()))
+    })
+    
+    output$quadrat_habitat_plot <- renderPlot({
+      req(quadrat_data(), quadrat_habitat_result())
+      
+      ggplot(quadrat_data(), aes(x = habitat, y = percent_cover, fill = habitat)) +
+        geom_boxplot(alpha = 0.7, outlier.shape = 16, outlier.size = 2) +
+        geom_jitter(width = 0.2, alpha = 0.5, size = 2) +
+        labs(title = "Habitat Effects on Percent Cover",
+             x = "Habitat Type", y = "Percent Cover (%)", fill = "Habitat") +
+        theme_light() +
+        scale_fill_viridis_d() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    })
+    
+    output$quadrat_habitat_code <- renderText({
+      "# R Code for Habitat Analysis (ANOVA)
+habitat_model <- aov(percent_cover ~ habitat, data = data)
+summary(habitat_model)
+anova(habitat_model)"
+    })
+    
+    updateTabsetPanel(session, "quadrat_tabs", selected = "Habitat Analysis")
+  })
+  
   
   point_data <- reactive({
     req(input$point_file)
@@ -1067,11 +1097,9 @@ Anova(model, type = 2)"
     DT::datatable(point_data(), options = list(pageLength = 10, scrollX = TRUE))
   })
   
-  # Process data and fill missing values
   processed_point_data <- reactive({
     req(point_data())
-    
-    # Get all combinations of transect, distance, and species
+
     all_combinations <- point_data() %>%
       tidyr::expand(transect, distance, species) %>%
       left_join(point_data() %>% select(transect, habitat) %>% distinct(), by = "transect")
@@ -1106,30 +1134,25 @@ filled_data <- all_combinations %>%
     
     updateTabsetPanel(session, "point_tabs", selected = "Processed Data")
   })
-  
-  # Calculate diversity metrics
+
   diversity_metrics <- reactive({
     req(processed_point_data())
-    
-    # Alpha diversity (per transect) - calculate species richness for each transect
+
     alpha_div <- processed_point_data() %>%
       group_by(habitat, transect, species) %>%
       summarise(present = max(presence_absence), .groups = 'drop') %>%
       group_by(habitat, transect) %>%
       summarise(alpha_diversity = sum(present > 0), .groups = 'drop')
-    
-    # Gamma diversity (per habitat) - total unique species across all transects in each habitat
+
     gamma_div <- processed_point_data() %>%
       group_by(habitat, species) %>%
       summarise(present = max(presence_absence), .groups = 'drop') %>%
       group_by(habitat) %>%
       summarise(gamma_diversity = sum(present > 0), .groups = 'drop')
-    
-    # Create wide format for beta diversity calculations
+
     data_wide <- processed_point_data() %>%
       tidyr::pivot_wider(names_from = species, values_from = presence_absence, values_fill = 0)
-    
-    # Beta diversity calculations
+
     beta_transects <- data_wide %>%
       select(-habitat, -transect, -distance) %>%
       group_by(data_wide$transect) %>%
@@ -1139,8 +1162,7 @@ filled_data <- all_combinations %>%
     rownames(beta_transects_matrix) <- unique(data_wide$transect)
     
     beta_div_transects <- vegan::vegdist(beta_transects_matrix, method = "jaccard")
-    
-    # Beta diversity between habitats
+
     beta_habitats <- processed_point_data() %>%
       group_by(habitat, species) %>%
       summarise(present = max(presence_absence), .groups = 'drop') %>%
@@ -1158,12 +1180,10 @@ filled_data <- all_combinations %>%
       beta_habitats = beta_div_habitats
     ))
   })
-  
-  # Quadrat-level data for ANOVA (each distance point is treated as a quadrat)
+
   quadrat_level_data <- reactive({
     req(processed_point_data())
-    
-    # Calculate species richness at each distance point (each distance = one "quadrat")
+
     quadrat_richness <- processed_point_data() %>%
       group_by(habitat, transect, distance, species) %>%
       summarise(present = max(presence_absence), .groups = 'drop') %>%
@@ -1188,8 +1208,7 @@ filled_data <- all_combinations %>%
     
     output$beta_diversity_table <- DT::renderDataTable({
       req(diversity_metrics())
-      
-      # Convert distance matrices to data frames for display
+
       beta_transects_df <- as.data.frame(as.matrix(diversity_metrics()$beta_transects))
       beta_transects_df$Transect <- rownames(beta_transects_df)
       beta_transects_df <- beta_transects_df[, c("Transect", setdiff(names(beta_transects_df), "Transect"))]
@@ -1198,7 +1217,6 @@ filled_data <- all_combinations %>%
       beta_habitats_df$Habitat <- rownames(beta_habitats_df)
       beta_habitats_df <- beta_habitats_df[, c("Habitat", setdiff(names(beta_habitats_df), "Habitat"))]
       
-      # Combine both tables
       combined_df <- list(
         "Between Transects" = beta_transects_df,
         "Between Habitats" = beta_habitats_df
@@ -1262,8 +1280,7 @@ ggplot(alpha_diversity, aes(x = habitat, y = alpha_diversity, fill = habitat)) +
     
     updateTabsetPanel(session, "point_tabs", selected = "Diversity Plots")
   })
-  
-  # ANOVA analysis using quadrat-level data (each distance point as a quadrat)
+
   anova_result <- reactive({
     req(quadrat_level_data())
     aov(richness ~ habitat, data = quadrat_level_data())
@@ -1316,9 +1333,6 @@ ggplot(alpha_diversity, aes(x = habitat, y = alpha_diversity, fill = habitat)) +
     updateTabsetPanel(session, "point_tabs", selected = "ANOVA Results")
   })
   
-  # ==== DOWNLOAD HANDLERS ====
-  
-  # Combined Analysis Report
   output$generate_combined_html <- downloadHandler(
     filename = function() {
       paste("Ecological_Analysis_Report_", Sys.Date(), ".html", sep = "")
@@ -1334,8 +1348,7 @@ ggplot(alpha_diversity, aes(x = habitat, y = alpha_diversity, fill = habitat)) +
       
       temp_dir <- tempdir()
       temp_rmd <- file.path(temp_dir, "combined_report.Rmd")
-      
-      # Prepare data for report
+
       quadrat_data_df <- if (has_quadrat) quadrat_data() else NULL
       quadrat_summary_df <- if (has_quadrat) quadrat_summary_data() else NULL
       quadrat_model_obj <- if (has_quadrat) quadrat_model_result() else NULL

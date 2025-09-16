@@ -1,0 +1,504 @@
+---
+title: "Lab 1 - Vegetation Survey"
+author: "BIOL 307 - Field Techniques"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: flatly
+    highlight: tango
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, 
+                     fig.width = 10, fig.height = 6, fig.align = "center")
+```
+
+# Introduction
+
+This tutorial will guide you through two complementary ecological data analysis methods: **Quadrat Sampling** and **Point-Intercept Sampling**. You'll learn to analyze species-abundance relationships and diversity patterns using R.
+
+## Learning Objectives
+
+By the end of this tutorial, you will be able to:
+
+1. Analyze quadrat data using linear mixed effects models for richness-cover relationships
+2. Perform habitat comparisons using ANOVA-based mixed effects models
+3. Process point-intercept sampling data 
+4. Calculate alpha, beta, and gamma diversity metrics
+5. Perform statistical comparisons between habitats
+6. Create publication-quality visualizations
+
+## Required Packages
+
+First, let's load all the necessary R packages:
+
+```{r load-packages}
+# Install packages if needed (uncomment the lines below)
+# install.packages(c("ggplot2", "dplyr", "lme4", "car", "sjPlot", 
+#                   "knitr", "vegan", "tidyr", "gridExtra", "viridis"))
+
+# Load required libraries
+library(ggplot2)    # For creating plots
+library(dplyr)      # For data manipulation
+library(lme4)       # For mixed effects models
+library(car)        # For ANOVA testing
+library(sjPlot)     # For model tables
+library(knitr)      # For nice tables
+library(vegan)      # For ecological diversity calculations
+library(tidyr)      # For data reshaping
+library(gridExtra)  # For arranging multiple plots
+library(viridis)    # For color palettes
+
+# Set theme for all plots
+theme_set(theme_minimal())
+```
+
+---
+
+# Part I: Quadrat Sampling Analysis
+
+Quadrat sampling examines the relationship between species diversity and vegetation coverage in small, defined areas.
+
+## Step 1: Load Quadrat Data
+
+```{r load-quadrat-data}
+# Load your quadrat data
+# Replace "sample_data.csv" with your actual file path
+quadrat_data <- read.csv("sample_data.csv", stringsAsFactors = TRUE)
+
+# If you don't have data, create sample data:
+set.seed(123)
+quadrat_data <- data.frame(
+  habitat = rep(c("grassland", "forest", "wetland", "grassland"), each = 5),
+  transect = rep(paste0("T", 1:4), each = 5),
+  quadrat = rep(1:5, 4),
+  percent_cover = round(rnorm(20, mean = 65, sd = 15), 1),
+  richness = sample(3:12, 20, replace = TRUE)
+)
+
+# Convert categorical variables to factors
+quadrat_data$habitat <- as.factor(quadrat_data$habitat)
+quadrat_data$transect <- as.factor(quadrat_data$transect)
+quadrat_data$quadrat <- as.factor(quadrat_data$quadrat)
+
+# Display the first few rows
+head(quadrat_data)
+```
+
+## Step 2: Explore the Quadrat Data
+
+```{r explore-quadrat}
+nrow(quadrat_data)
+length(unique(quadrat_data$habitat))
+length(unique(quadrat_data$transect))
+nrow(quadrat_data) / length(unique(quadrat_data$transect))
+
+summary(quadrat_data[, c("percent_cover", "richness")])
+
+# Show habitat distribution
+table(quadrat_data$habitat)
+```
+
+## Step 3: Create Summary Statistics Table
+
+```{r quadrat-summary}
+# Calculate summary statistics by transect
+summary_by_transect <- quadrat_data %>%
+  group_by(transect) %>%
+  summarise(
+    n_quadrats = n(),
+    mean_cover = round(mean(percent_cover), 2),
+    sd_cover = round(sd(percent_cover), 2),
+    mean_richness = round(mean(richness), 2),
+    sd_richness = round(sd(richness), 2),
+    .groups = 'drop'
+  )
+
+# Display the summary table
+kable(summary_by_transect, 
+      caption = "Table 1: Summary statistics for quadrat data by transect",
+      col.names = c("Transect", "N Quadrats", "Mean Cover (%)", 
+                   "SD Cover", "Mean Richness", "SD Richness"))
+```
+
+## Step 4: Visualize Quadrat Data
+
+```{r quadrat-plots}
+# Boxplot of percent cover by transect
+p1 <- ggplot(quadrat_data, aes(x = transect, y = percent_cover)) +
+  geom_boxplot(fill = "lightblue", alpha = 0.7) +
+  geom_point(position = position_jitter(width = 0.2), alpha = 0.6, size = 2) +
+  labs(title = "Distribution of Percent Cover by Transect",
+       x = "Transect", 
+       y = "Percent Cover (%)") +
+  theme(plot.title = element_text(size = 14, face = "bold"))
+
+print(p1)
+
+# Scatterplot of richness vs percent cover
+p2 <- ggplot(quadrat_data, aes(x = richness, y = percent_cover, color = transect)) +
+  geom_point(size = 3, alpha = 0.7) +
+  geom_smooth(method = "lm", se = TRUE, color = "black", linetype = "dashed") +
+  labs(title = "Species Richness vs Percent Cover",
+       x = "Species Richness", 
+       y = "Percent Cover (%)", 
+       color = "Transect") +
+  scale_color_viridis_d() +
+  theme(legend.position = "bottom")
+
+print(p2)
+
+# Boxplot of percent cover by habitat
+p3 <- ggplot(quadrat_data, aes(x = habitat, y = percent_cover, fill = habitat)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = 16, outlier.size = 2) +
+  geom_jitter(width = 0.2, alpha = 0.5, size = 2) +
+  labs(title = "Habitat Effects on Percent Cover",
+       x = "Habitat Type", 
+       y = "Percent Cover (%)", 
+       fill = "Habitat") +
+  scale_fill_viridis_d() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold"))
+
+print(p3)
+```
+
+## Step 5: Linear Mixed Effects Model
+
+```{r quadrat-model}
+model <- lmer(percent_cover ~ richness + (1|transect), data = quadrat_data)
+summary(model)
+anova_result <- Anova(model, type = 2)
+anova_result
+sjPlot::tab_model(model)
+```
+
+## Step 6: Model Interpretation
+
+```{r model-interpretation}
+richness_coef <- fixef(model)["richness"]
+richness_p <- anova_result["richness", "Pr(>Chisq)"]
+richness_coef
+richness_p
+```
+
+## Step 7: Habitat Analysis
+
+```{r habitat-analysis}
+# Analyze habitat effects on percent cover (transects nested within habitats)
+habitat_model <- aov(percent_cover ~ habitat, data = quadrat_data)
+
+# Display ANOVA results
+summary(habitat_model)
+
+# Check for significant differences and run post-hoc tests if needed
+anova_p <- summary(habitat_model)[[1]]$'Pr(>F)'[1]
+print(paste("ANOVA p-value:", round(anova_p, 4)))
+
+if(anova_p < 0.05) {
+  cat("\nSignificant habitat effect detected. Running Tukey HSD post-hoc test:\n")
+  tukey_result <- TukeyHSD(habitat_model)
+  print(tukey_result)
+}
+```
+
+## Step 8: Habitat Model Interpretation
+
+```{r habitat-interpretation}
+# Calculate means by habitat
+habitat_means <- quadrat_data %>%
+  group_by(habitat) %>%
+  summarise(
+    mean_cover = round(mean(percent_cover), 2),
+    sd_cover = round(sd(percent_cover), 2),
+    n = n(),
+    .groups = 'drop'
+  )
+
+kable(habitat_means, 
+      caption = "Mean percent cover by habitat type",
+      col.names = c("Habitat", "Mean Cover (%)", "SD Cover", "N"))
+
+# Effect size (eta-squared)
+library(effectsize)
+eta_sq <- eta_squared(habitat_model)
+print(eta_sq)
+```
+
+---
+
+# Part II: Point-Intercept Sampling Analysis
+
+Point-intercept sampling examines species diversity patterns across different habitats.
+
+## Step 9: Load Point-Intercept Data
+
+```{r load-point-data}
+# Create sample point-intercept data
+# Replace this with: point_data <- read.csv("your_point_intercept_file.csv")
+
+set.seed(456)
+habitats <- c("Prairie", "Forest", "Wetland")
+transects <- paste0("T", 1:6)
+distances <- 1:5
+species <- paste0("Species_", LETTERS[1:8])
+
+# Create realistic sample data
+point_data <- expand.grid(
+  habitat = habitats,
+  transect = transects[1:2], # 2 transects per habitat
+  distance = distances,
+  species = species[1:5]     # 5 species per habitat type
+) %>%
+  filter((habitat == "Prairie" & transect %in% c("T1", "T2")) |
+         (habitat == "Forest" & transect %in% c("T3", "T4")) |
+         (habitat == "Wetland" & transect %in% c("T5", "T6"))) %>%
+  mutate(
+    presence_absence = rbinom(n(), 1, prob = 0.3)  # 30% chance of presence
+  )
+
+# Convert to factors
+point_data$habitat <- as.factor(point_data$habitat)
+point_data$transect <- as.factor(point_data$transect)
+point_data$species <- as.factor(point_data$species)
+
+nrow(point_data)
+length(unique(point_data$habitat))
+length(unique(point_data$transect))
+length(unique(point_data$species))
+head(point_data, 10)
+```
+
+## Step 10: Process Point-Intercept Data
+
+```{r process-point-data}
+all_combinations <- point_data %>%
+  tidyr::expand(transect, distance, species) %>%
+  left_join(point_data %>% select(transect, habitat) %>% distinct(), by = "transect")
+
+processed_point_data <- all_combinations %>%
+  left_join(point_data, by = c("habitat", "transect", "distance", "species")) %>%
+  mutate(presence_absence = ifelse(is.na(presence_absence), 0, presence_absence))
+
+nrow(point_data)
+nrow(processed_point_data)
+head(processed_point_data, 10)
+```
+
+## Step 11: Calculate Diversity Metrics
+
+### Alpha Diversity (Species Richness per Transect)
+
+```{r alpha-diversity}
+alpha_diversity <- processed_point_data %>%
+  group_by(habitat, transect) %>%
+  summarise(alpha_diversity = sum(presence_absence), .groups = 'drop') %>%
+  arrange(habitat, transect)
+
+alpha_diversity
+
+alpha_summary <- alpha_diversity %>%
+  group_by(habitat) %>%
+  summarise(
+    mean_alpha = round(mean(alpha_diversity), 2),
+    sd_alpha = round(sd(alpha_diversity), 2),
+    min_alpha = min(alpha_diversity),
+    max_alpha = max(alpha_diversity),
+    .groups = 'drop'
+  )
+
+alpha_summary
+```
+
+### Gamma Diversity (Total Species per Habitat)
+
+```{r gamma-diversity}
+gamma_diversity <- processed_point_data %>%
+  group_by(habitat, species) %>%
+  summarise(present = max(presence_absence), .groups = 'drop') %>%
+  group_by(habitat) %>%
+  summarise(gamma_diversity = sum(present), .groups = 'drop')
+
+gamma_diversity
+```
+
+### Beta Diversity (Community Dissimilarity)
+
+```{r beta-diversity}
+community_matrix <- processed_point_data %>%
+  select(habitat, transect, species, presence_absence) %>%
+  pivot_wider(names_from = species, values_from = presence_absence, values_fill = 0) %>%
+  column_to_rownames("transect") %>%
+  select(-habitat)
+
+beta_diversity_matrix <- vegan::vegdist(community_matrix, method = "jaccard")
+beta_df <- as.matrix(beta_diversity_matrix)
+beta_df
+mean(beta_diversity_matrix)
+```
+
+## Step 12: Statistical Analysis - ANOVA
+
+```{r anova-analysis}
+quadrat_level_data <- processed_point_data %>%
+  group_by(habitat, transect, distance) %>%
+  summarise(richness = sum(presence_absence), .groups = 'drop')
+
+nrow(quadrat_level_data)
+table(quadrat_level_data$habitat)
+
+anova_model <- aov(richness ~ habitat, data = quadrat_level_data)
+anova_summary <- summary(anova_model)
+anova_summary
+
+anova_p <- anova_summary[[1]]["habitat", "Pr(>F)"]
+anova_p
+
+if (anova_p < 0.05) {
+  tukey_results <- TukeyHSD(anova_model)
+  tukey_results
+}
+```
+
+## Step 13: Visualize Point-Intercept Results
+
+```{r point-visualizations}
+# Alpha diversity boxplot
+p3 <- ggplot(alpha_diversity, aes(x = habitat, y = alpha_diversity, fill = habitat)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_point(position = position_jitter(width = 0.2), size = 3, alpha = 0.8) +
+  labs(title = "Alpha Diversity by Habitat Type",
+       x = "Habitat", 
+       y = "Species Richness (Alpha Diversity)",
+       fill = "Habitat") +
+  scale_fill_viridis_d() +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 14, face = "bold"))
+
+print(p3)
+
+# Quadrat-level richness boxplot (for ANOVA)
+p4 <- ggplot(quadrat_level_data, aes(x = habitat, y = richness, fill = habitat)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_point(position = position_jitter(width = 0.2), alpha = 0.6) +
+  labs(title = "Species Richness by Habitat Type",
+       subtitle = "Quadrat-level analysis (each distance point = 1 quadrat)",
+       x = "Habitat", 
+       y = "Species Richness", 
+       fill = "Habitat") +
+  scale_fill_viridis_d() +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 14, face = "bold"))
+
+print(p4)
+
+# Combined diversity comparison
+diversity_comparison <- alpha_diversity %>%
+  left_join(gamma_diversity, by = "habitat") %>%
+  mutate(beta_component = gamma_diversity - alpha_diversity)
+
+p5 <- diversity_comparison %>%
+  select(habitat, alpha_diversity, beta_component) %>%
+  pivot_longer(cols = c(alpha_diversity, beta_component), 
+               names_to = "diversity_type", values_to = "value") %>%
+  mutate(diversity_type = case_when(
+    diversity_type == "alpha_diversity" ~ "Alpha (Local)",
+    diversity_type == "beta_component" ~ "Beta (Turnover)"
+  )) %>%
+  ggplot(aes(x = habitat, y = value, fill = diversity_type)) +
+  geom_col(position = "stack", alpha = 0.8) +
+  labs(title = "Diversity Partitioning by Habitat",
+       subtitle = "Alpha + Beta = Gamma Diversity",
+       x = "Habitat", 
+       y = "Species Richness", 
+       fill = "Diversity Component") +
+  scale_fill_manual(values = c("Alpha (Local)" = "#440154FF", 
+                              "Beta (Turnover)" = "#FDE725FF")) +
+  theme(plot.title = element_text(size = 14, face = "bold"))
+
+print(p5)
+```
+
+---
+
+# Part III: Integrated Results and Discussion
+
+## Step 14: Summary of Key Findings
+
+```{r summary-findings}
+nrow(quadrat_data)
+length(unique(quadrat_data$transect))
+mean(quadrat_data$percent_cover)
+mean(quadrat_data$richness)
+richness_p
+
+nrow(processed_point_data)
+length(unique(processed_point_data$habitat))
+mean(alpha_diversity$alpha_diversity)
+gamma_diversity
+anova_p
+```
+
+## Step 15: Ecological Interpretation
+
+```{r ecological-interpretation}
+diversity_ratios <- diversity_comparison %>%
+  mutate(
+    beta_gamma_ratio = beta_component / gamma_diversity,
+    alpha_gamma_ratio = alpha_diversity / gamma_diversity
+  )
+
+diversity_ratios
+
+max_gamma <- gamma_diversity$habitat[which.max(gamma_diversity$gamma_diversity)]
+max_gamma
+
+max_beta <- diversity_ratios$habitat[which.max(diversity_ratios$beta_gamma_ratio)]
+max_beta
+
+mean_beta <- mean(beta_diversity_matrix)
+mean_beta
+```
+
+## Step 16: Create Final Summary Plots
+
+```{r final-summary-plots, fig.height=12}
+library(gridExtra)
+
+final_plot <- grid.arrange(p1, p2, p3, p4, ncol = 2)
+
+final_summary <- alpha_diversity %>%
+  group_by(habitat) %>%
+  summarise(
+    n_transects = n(),
+    mean_alpha = round(mean(alpha_diversity), 2),
+    sd_alpha = round(sd(alpha_diversity), 2),
+    .groups = 'drop'
+  ) %>%
+  left_join(gamma_diversity, by = "habitat") %>%
+  mutate(
+    mean_beta = round(gamma_diversity - mean_alpha, 2),
+    alpha_gamma_ratio = round(mean_alpha / gamma_diversity, 2)
+  )
+
+final_summary
+```
+
+---
+
+# Conclusion
+
+Congratulations! You have completed a comprehensive ecological data analysis using both quadrat sampling and point-intercept sampling methods. 
+
+## R Script Export
+
+```{r export-code, eval=FALSE}
+# To save all the code from this tutorial as an R script:
+# knitr::purl("Lab1_Analysis_Tutorial.Rmd", output = "Lab1_Analysis_Code.R")
+```
+
+---
